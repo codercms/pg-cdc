@@ -4,11 +4,15 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"github.com/jackc/pglogrepl"
+	"github.com/codercms/pg-cdc/replication/decoder"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/jackc/pglogrepl"
 	"go.uber.org/zap"
 
 	"github.com/codercms/pg-cdc/replication"
@@ -21,22 +25,46 @@ var publication string
 var initialSnapshot bool
 
 func init() {
-	flag.StringVar(&connString, "conn", "", "connection string")
+	flag.StringVar(&connString, "conn", "", "replication connection string")
 	flag.StringVar(&slot, "slot", "", "replication slot")
 	flag.StringVar(&publication, "publication", "", "replication publication name")
 	flag.BoolVar(&initialSnapshot, "snapshot", false, "make initial snapshot?")
 }
 
+type User struct {
+	ID        int64         `db:"id" json:"id"`
+	Email     string        `db:"email" json:"email"`
+	Dob       pgtype.Date   `db:"dob" json:"dob"`
+	Bio       zeronull.Text `db:"bio" json:"bio"`
+	CreatedAt time.Time     `db:"created_at" json:"created_at"`
+
+	Toasted []string `db:"-" json:"toasted,omitempty"`
+}
+type UserDelete struct {
+	ID int64 `db:"id" json:"id"`
+}
+
+func (u *User) SetToastedColumns(cols []string) {
+	u.Toasted = cols
+}
+
 func main() {
 	flag.Parse()
 
-	logger, _ := zap.NewDevelopment()
+	loggerDevCfg := zap.NewDevelopmentConfig()
+	loggerDevCfg.Level = zap.NewAtomicLevelAt(zap.InfoLevel)
+
+	logger, _ := loggerDevCfg.Build()
 
 	cfg := replication.Config{
 		ConnString:  connString,
 		Slot:        slot,
 		Publication: publication,
 		Logger:      logger,
+
+		PerTableDecoder: map[string]decoder.Decoder{
+			"public.users": new(decoder.StructDecoder[User, UserDelete]),
+		},
 	}
 
 	if err := cfg.Parse(); err != nil {
@@ -128,6 +156,7 @@ func main() {
 			return
 		}
 
+		start := time.Now()
 		logger.Info("TX started")
 
 		for ev, err := range tx.Events {
@@ -163,7 +192,9 @@ func main() {
 		}
 
 		tx.Confirm(false)
+		// You have to store and advance resumeLSN in some persistent storage, so you can always start at desired LSN
+		// and skip already processed changes in case of replication handler crash, i.e. in the middle of transaction
 
-		logger.Info("TX handled")
+		logger.Info("TX handled", zap.Duration("elapsed", time.Since(start)))
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"iter"
 
 	"github.com/jackc/pglogrepl"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/codercms/pg-cdc/replication/event"
 	"github.com/codercms/pg-cdc/replication/types"
@@ -95,11 +96,31 @@ func (c *Consumer) handleTxReplicationMessage(ctx context.Context, xld *XLogData
 
 	case *pglogrepl.RelationMessage:
 		var key []*pglogrepl.RelationMessageColumn
+		fds := make([]pgconn.FieldDescription, 0, len(msg.Columns))
 
-		for _, col := range msg.Columns {
+		var keyFDs []pgconn.FieldDescription
+
+		for idx, col := range msg.Columns {
+			fd := pgconn.FieldDescription{
+				Name:                 col.Name,
+				TableOID:             msg.RelationID,
+				TableAttributeNumber: uint16(idx),
+				DataTypeOID:          col.DataType,
+				//DataTypeSize:         dataType.,
+				TypeModifier: col.TypeModifier,
+				Format:       0,
+			}
+
+			fds = append(fds, fd)
+
 			if col.Flags == 1 {
 				key = append(key, col)
+				keyFDs = append(keyFDs, fd)
 			}
+		}
+
+		if perTableDec, ok := c.perTableDecoderRef[msg.Namespace+"."+msg.RelationName]; ok {
+			c.perTableDecoder[msg.RelationID] = perTableDec
 		}
 
 		c.setTableInfo(&types.TableInfo{
@@ -109,8 +130,10 @@ func (c *Consumer) handleTxReplicationMessage(ctx context.Context, xld *XLogData
 			Name:   msg.RelationName,
 
 			Columns: msg.Columns,
+			FDs:     fds,
 
-			Key: key,
+			Key:    key,
+			KeyFDs: keyFDs,
 		})
 
 		return nil, nil
@@ -174,7 +197,12 @@ func (c *Consumer) handleInsertMessage(msg *pglogrepl.InsertMessage, lsn pglogre
 		return nil, nil
 	}
 
-	values, err := c.decoder.DecodeTuple(c.typeMap, rel, msg.Tuple.Columns)
+	decoder := c.perTableDecoder[msg.RelationID]
+	if decoder == nil {
+		decoder = c.decoder
+	}
+
+	values, err := decoder.DecodeTuple(c.typeMap, rel, msg.Tuple.Columns, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract tuple values: %w", err)
 	}
@@ -195,6 +223,11 @@ func (c *Consumer) handleUpdateMessage(msg *pglogrepl.UpdateMessage, lsn pglogre
 		return nil, nil
 	}
 
+	decoder := c.perTableDecoder[msg.RelationID]
+	if decoder == nil {
+		decoder = c.decoder
+	}
+
 	var oldValues any
 	var newValues any
 
@@ -202,14 +235,16 @@ func (c *Consumer) handleUpdateMessage(msg *pglogrepl.UpdateMessage, lsn pglogre
 
 	// Handle old tuple (if present)
 	if msg.OldTuple != nil {
-		oldValues, err = c.decoder.DecodeTuple(c.typeMap, rel, msg.OldTuple.Columns)
+		probablyOnlyKey := msg.OldTupleType == pglogrepl.UpdateMessageTupleTypeKey
+
+		oldValues, err = decoder.DecodeTuple(c.typeMap, rel, msg.OldTuple.Columns, probablyOnlyKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to extract old tuple values: %w", err)
 		}
 	}
 
 	// Handle new tuple
-	newValues, err = c.decoder.DecodeTuple(c.typeMap, rel, msg.NewTuple.Columns)
+	newValues, err = decoder.DecodeTuple(c.typeMap, rel, msg.NewTuple.Columns, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract new tuple values: %w", err)
 	}
@@ -230,7 +265,14 @@ func (c *Consumer) handleDeleteMessage(msg *pglogrepl.DeleteMessage, lsn pglogre
 		return nil, nil
 	}
 
-	oldValues, err := c.decoder.DecodeTuple(c.typeMap, rel, msg.OldTuple.Columns)
+	decoder := c.perTableDecoder[msg.RelationID]
+	if decoder == nil {
+		decoder = c.decoder
+	}
+
+	probablyOnlyKey := msg.OldTupleType == pglogrepl.DeleteMessageTupleTypeKey
+
+	oldValues, err := decoder.DecodeTuple(c.typeMap, rel, msg.OldTuple.Columns, probablyOnlyKey)
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract old tuple values: %w", err)
 	}

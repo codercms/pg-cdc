@@ -19,6 +19,7 @@ func (c *DefaultDecoder) DecodeTuple(
 	typMap *pgtype.Map,
 	rel *types.TableInfo,
 	cols []*pglogrepl.TupleDataColumn,
+	probablyOnlyKey bool,
 ) (any, error) {
 	values := make(map[string]any, len(rel.Columns))
 
@@ -29,10 +30,10 @@ func (c *DefaultDecoder) DecodeTuple(
 
 		colName := rel.Columns[idx].Name
 		switch col.DataType {
-		case 'n': // null
+		case pglogrepl.TupleDataTypeNull: // null
 			values[colName] = nil
 
-		case 't': // text
+		case pglogrepl.TupleDataTypeText: // text
 			val, err := c.decodeColumnData(typMap, col.Data, rel.Columns[idx].DataType)
 			if err != nil {
 				return nil, fmt.Errorf("failed to decode column data: %w", err)
@@ -40,7 +41,7 @@ func (c *DefaultDecoder) DecodeTuple(
 
 			values[colName] = val
 
-		case 'u': // unchanged toast
+		case pglogrepl.TupleDataTypeToast: // unchanged toast
 			values[colName] = UnchangedToastedData
 		}
 	}

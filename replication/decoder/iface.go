@@ -12,5 +12,6 @@ type Decoder interface {
 		typMap *pgtype.Map,
 		rel *types.TableInfo,
 		cols []*pglogrepl.TupleDataColumn,
+		probablyOnlyKey bool,
 	) (any, error)
 }

@@ -38,6 +38,13 @@ type Config struct {
 	// Can be used to decode tuples as a structs
 	Decoder decoder.Decoder
 
+	// PerTableDecoder options custom tuple decoder impl
+	//
+	// Can be used to decode tuples as a user-defined structs
+	//
+	// Key should table FQDN: schema.table (not escaped), e.g.: public.users
+	PerTableDecoder map[string]decoder.Decoder
+
 	// OnTableInfoChange is called when new table info sent via replication
 	OnTableInfoChange func(*types.TableInfo)
 

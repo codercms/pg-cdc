@@ -42,6 +42,9 @@ type Consumer struct {
 	typeMap *pgtype.Map
 
 	decoder decoder.Decoder
+
+	perTableDecoderRef map[string]decoder.Decoder
+	perTableDecoder    map[uint32]decoder.Decoder
 }
 
 func NewConsumer(cfg *Config) *Consumer {
@@ -69,6 +72,9 @@ func NewConsumer(cfg *Config) *Consumer {
 		onNewTableInfo: cfg.OnTableInfoChange,
 
 		decoder: cDecoder,
+
+		perTableDecoderRef: cfg.PerTableDecoder,
+		perTableDecoder:    make(map[uint32]decoder.Decoder),
 	}
 }
 
