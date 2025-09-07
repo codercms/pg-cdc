@@ -171,6 +171,10 @@ func (c *Consumer) StartReplication(ctx context.Context, resumeLSN pglogrepl.LSN
 					if !yield(tx, nil) {
 						return
 					}
+
+				default:
+					yield(nil, &BareTransactionEventError{})
+					return
 				}
 
 			default:
