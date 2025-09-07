@@ -69,24 +69,24 @@ func main() {
 						return nil
 					},
 				},
-				{
-					Schema: "public",
-					Name:   "users",
-					ProcessRow: func(row map[string]any) error {
-						logger.Info("Snapshot row", zap.Any("row", row))
-
-						return nil
-					},
-				},
-				{
-					Schema: "public",
-					Name:   "users",
-					ProcessRow: func(row map[string]any) error {
-						logger.Info("Snapshot row", zap.Any("row", row))
-
-						return nil
-					},
-				},
+				//{
+				//	Schema: "public",
+				//	Name:   "users",
+				//	ProcessRow: func(row map[string]any) error {
+				//		logger.Info("Snapshot row", zap.Any("row", row))
+				//
+				//		return nil
+				//	},
+				//},
+				//{
+				//	Schema: "public",
+				//	Name:   "users",
+				//	ProcessRow: func(row map[string]any) error {
+				//		logger.Info("Snapshot row", zap.Any("row", row))
+				//
+				//		return nil
+				//	},
+				//},
 			},
 		); err != nil {
 			logger.Fatal("Cannot finish snapshot process", zap.Error(err))
