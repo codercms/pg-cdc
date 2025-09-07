@@ -4,18 +4,18 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"github.com/codercms/pg-cdc/replication/decoder"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
 	"github.com/jackc/pglogrepl"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgtype/zeronull"
 	"go.uber.org/zap"
 
 	"github.com/codercms/pg-cdc/replication"
+	"github.com/codercms/pg-cdc/replication/decoder"
 	"github.com/codercms/pg-cdc/replication/event"
 )
 
