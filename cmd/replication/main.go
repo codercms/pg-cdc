@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"github.com/jackc/pglogrepl"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,11 +18,13 @@ import (
 var connString string
 var slot string
 var publication string
+var initialSnapshot bool
 
 func init() {
 	flag.StringVar(&connString, "conn", "", "connection string")
 	flag.StringVar(&slot, "slot", "", "replication slot")
 	flag.StringVar(&publication, "publication", "", "replication publication name")
+	flag.BoolVar(&initialSnapshot, "snapshot", false, "make initial snapshot?")
 }
 
 func main() {
@@ -42,6 +45,60 @@ func main() {
 
 	ctx, _ := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 
+	var snapshotCoord *replication.SnapshotCoordinator
+
+	if initialSnapshot {
+		snapshotCoord = replication.NewSnapshotCoordinator(replication.SnapshotConfig{
+			Workers: 1,
+			Config:  &cfg,
+		})
+
+		if err := snapshotCoord.StartSnapshot(ctx); err != nil {
+			logger.Fatal("Cannot start snapshot process", zap.Error(err))
+		}
+
+		if err := snapshotCoord.SnapshotTables(
+			ctx,
+			[]replication.SnapshotTable{
+				{
+					Schema: "public",
+					Name:   "users",
+					ProcessRow: func(row map[string]any) error {
+						logger.Info("Snapshot row", zap.Any("row", row))
+
+						return nil
+					},
+				},
+				{
+					Schema: "public",
+					Name:   "users",
+					ProcessRow: func(row map[string]any) error {
+						logger.Info("Snapshot row", zap.Any("row", row))
+
+						return nil
+					},
+				},
+				{
+					Schema: "public",
+					Name:   "users",
+					ProcessRow: func(row map[string]any) error {
+						logger.Info("Snapshot row", zap.Any("row", row))
+
+						return nil
+					},
+				},
+			},
+		); err != nil {
+			logger.Fatal("Cannot finish snapshot process", zap.Error(err))
+		}
+	}
+
+	var resumeLSN pglogrepl.LSN
+	if snapshotCoord != nil {
+		resumeLSN = snapshotCoord.ConsistentPoint()
+		logger.Info("Using consistent point from snapshot", zap.String("lsn", resumeLSN.String()))
+	}
+
 	consumer := replication.NewConsumer(&cfg)
 
 	handleError := func(err error) bool {
@@ -57,7 +114,11 @@ func main() {
 		return true
 	}
 
-	txIterator, err := consumer.StartReplication(ctx, 0)
+	txIterator, err := consumer.StartReplication(ctx, resumeLSN)
+	// It is only safe to stop snapshot coordinator after
+	if snapshotCoord != nil {
+		snapshotCoord.Close()
+	}
 	if err != nil {
 		logger.Fatal("Cannot start replication", zap.Error(err))
 	}

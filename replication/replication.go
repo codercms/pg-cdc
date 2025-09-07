@@ -285,6 +285,7 @@ func (c *Consumer) rawStream(ctx context.Context, resumeLSN pglogrepl.LSN) (iter
 		zap.Duration("wal_sender_timeout", walSenderTimeout),
 		zap.Duration("feedback_interval", feedbackInterval),
 		zap.String("slot_lsn", slotMetadata.ConfirmedFlushLSN.String()),
+		zap.String("resume_lsn", resumeLSN.String()),
 	)
 
 	if !(resumeLSN == 0 || slotMetadata.ConfirmedFlushLSN <= resumeLSN) {

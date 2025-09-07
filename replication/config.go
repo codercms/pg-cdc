@@ -41,9 +41,6 @@ type Config struct {
 	// OnTableInfoChange is called when new table info sent via replication
 	OnTableInfoChange func(*types.TableInfo)
 
-	// InitialSnapshot requests initial snapshot before reading replication messages
-	InitialSnapshot bool
-
 	// Connections below is filled when initial snapshot requested
 
 	metadataConn *pgx.Conn
@@ -67,6 +64,7 @@ func (c *Config) Parse() error {
 	// Set repl conn config
 
 	c.ReplicationConnCfg = connCfg.Copy()
+	c.ReplicationConnCfg.DefaultQueryExecMode = pgx.QueryExecModeSimpleProtocol
 
 	c.ReplicationConnCfg.RuntimeParams["replication"] = "database"
 	c.ReplicationConnCfg.RuntimeParams["application_name"] = "CDC Replication conn"
